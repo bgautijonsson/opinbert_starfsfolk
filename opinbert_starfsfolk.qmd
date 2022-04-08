@@ -1,0 +1,247 @@
+---
+title: "Er opinberu starfsfólki að fjölga?"
+author: "Brynjólfur Gauti Guðrúnar Jónsson"
+date: "2022/04/08"
+format: 
+    html:
+        code-fold: true
+        toc: true
+        toc-location: right
+        
+editor: source
+---
+
+```{r}
+#| include = FALSE
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = TRUE,
+                      fig.asp = 0.621, fig.width = 10, out.width = "100%")
+library(pxweb)
+library(tidyverse)
+library(scales)
+library(cowplot)
+library(ggthemes)
+library(ggtext)
+```
+
+# Lesa inn gögn
+
+Ég var að [læra á API kerfi Hagstofunnar](https://ropengov.github.io/pxweb/articles/pxweb.html) svo það er tilvalið að nýta okkur það til að sækja gögnin!
+
+```{r}
+url <- "https://px.hagstofa.is:443/pxis/api/v1/is/Samfelag/vinnumarkadur/vinnuaflskraargogn/VIN10050.px"
+
+px_vars <- pxweb_get(url)
+
+query_list <- list(
+    "Ár" = c("*"),
+    "Aldur" = c("0"),
+    "Rekstrarform" = c("*"),
+    "Kyn" = c("0"),
+    "Bakgrunnur" = c("*"),
+    "Lögheimili" = c("0")
+)
+
+
+d <- pxweb_get(url, query = pxweb_query(query_list), verbose = FALSE) |> 
+    as.data.frame() |> 
+    as_tibble() |> 
+    janitor::clean_names() |> 
+    mutate(ar = parse_number(ar)) |> 
+    select(ar, kyn, rekstrarform, starfandi, bakgrunnur) |> 
+    drop_na() |> 
+    mutate(tegund = case_when(str_detect(rekstrarform, "^K") ~ "Opinbert",
+                              str_detect(rekstrarform, "^B2") ~ "Opinbert",
+                              TRUE ~ "Annad"))
+
+url_mannfjoldi <- "https://px.hagstofa.is:443/pxis/api/v1/is/Ibuar/mannfjoldi/1_yfirlit/Yfirlit_mannfjolda/MAN00109.px"
+
+query_list_mannfjoldi <- list(
+    "Ár" = c("*"),
+    "Aldur" = c("*"),
+    "Kyn" = c("0")
+)
+
+
+mannfjoldi <- pxweb_get(url_mannfjoldi, query = pxweb_query(query_list_mannfjoldi),
+                        verbose = FALSE) |> 
+    as.data.frame() |> 
+    as_tibble() |> 
+    janitor::clean_names()  |> 
+    filter(aldur != "Alls") |> 
+    mutate(aldur = ifelse(str_detect(aldur, "Á 1"), "0", aldur) |> parse_number(),
+           ar = parse_number(ar)) |> 
+    filter(ar >= 2008, ar <= 2021,
+           aldur >= 19, aldur <= 65) |> 
+    group_by(ar, kyn) |> 
+    summarise(vinnandi_mannfjoldi = sum(mannfjoldi_1841_2066))
+
+
+d <- d |> 
+    inner_join(
+        mannfjoldi,
+        by = c("ar", "kyn")
+    )
+
+```
+
+# Hlutfall af vinnuafli
+
+```{r}
+p <- d |> 
+    filter(rekstrarform != "Alls starfandi", bakgrunnur == "Alls") |> 
+    count(ar, tegund, wt = starfandi) |> 
+    pivot_wider(names_from = tegund, values_from = n) |> 
+    mutate(hlutf = Opinbert / (Opinbert + Annad)) |> 
+    ggplot(aes(ar, hlutf)) +
+    geom_line() +
+    geom_rangeframe(data = tibble(ar = c(2008, 2021),
+                                  hlutf = c(0.2, 0.4))) +
+    scale_y_continuous(limits = c(0.2, 0.4),
+                       labels = label_percent(accuracy = 1),
+                       expand = expansion()) +
+    scale_x_continuous(limits = c(2008, 2021),
+                       breaks = seq(2008, 2021),
+                       expand = expansion(add = 0.5)) +
+    theme_tufte() +
+    labs(title = "Hlutfall opinberra starfsmanna af vinnuafli milli 2008 og 2021",
+         x = NULL,
+         y = NULL,
+         caption = "Kóði og gögn: https://github.com/bgautijonsson/opinbert_starfsfolk")
+
+p
+
+ggsave(plot = p, filename = "hlutfall_af_vinnuafli.pdf", 
+       width = 8, height = 0.5 * 8, scale = 1)
+```
+
+
+
+
+# Fjöldi starfsfólks
+
+## Röng mynd
+
+```{r}
+p <- d |> 
+    filter(rekstrarform != "Alls starfandi", bakgrunnur == "Alls") |> 
+    count(ar, tegund, wt = starfandi) |> 
+    pivot_wider(names_from = tegund, values_from = n) |> 
+    ggplot(aes(ar, Opinbert)) +
+    geom_line() +
+    geom_rangeframe(data = tibble(ar = c(2008, 2021),
+                                  Opinbert = c(49500, 61000))) +
+    scale_y_continuous(limits = c(49500, 61000),
+                       expand = expansion()) +
+    scale_x_continuous(limits = c(2008, 2021),
+                       breaks = seq(2008, 2021),
+                       expand = expansion(add = 0.5)) +
+    theme_tufte() +
+    labs(title = "Fjöldi opinberra starfsmanna milli 2008 og 2021",
+         subtitle = "Villandi framsetning með of þröngan y-ás",
+         x = NULL,
+         y = NULL,
+         caption = "Kóði og gögn: https://github.com/bgautijonsson/opinbert_starfsfolk")
+
+p
+
+ggsave(plot = p, filename = "fjoldi_rangt.pdf", 
+       width = 8, height = 0.5 * 8, scale = 1)
+```
+
+## Aðeins betri
+
+```{r}
+p <- d |> 
+    filter(rekstrarform != "Alls starfandi", bakgrunnur == "Alls") |> 
+    count(ar, tegund, wt = starfandi) |> 
+    pivot_wider(names_from = tegund, values_from = n) |> 
+    ggplot(aes(ar, Opinbert)) +
+    geom_line(aes(lty = "Fjöldi opinberra starfsmanna")) +
+    geom_line(data = d, aes(y= vinnandi_mannfjoldi / 3.9, lty = "Mannfjöldi 19 - 65 ára"))+
+    geom_rangeframe(data = tibble(ar = c(2008, 2021),
+                                  Opinbert = c(49500, 61000)),
+                    aes(x = ar, y = Opinbert), inherit.aes = F,
+                    sides= "rbl") +
+    scale_y_continuous(limits = c(49500, 61000),
+                       expand = expansion(), 
+                       name = "Fjöldi opinberra starfsmanna",
+                       sec.axis = sec_axis(trans = ~ . * 3.9, 
+                                           name = "Mannfjöldi 19 - 65 ára")) +
+    scale_x_continuous(limits = c(2008, 2021),
+                       breaks = seq(2008, 2021),
+                       expand = expansion(add = 0.5)) +
+    theme_tufte() +
+    theme(legend.position = c(0.3, 0.5), legend.background = element_rect()) +
+    labs(title = "Fjöldi opinberra starfsmanna og vinnandi mannfjöldi milli 2008 og 2021",
+         subtitle = "Setjum í samhengi við mannfjöldaþróun",
+         x = NULL,
+         y = NULL,
+         lty = NULL,
+         caption = "Kóði og gögn: https://github.com/bgautijonsson/opinbert_starfsfolk")
+
+p
+
+ggsave(plot = p, filename = "fjoldi_saman.pdf", 
+       width = 8, height = 0.5 * 8, scale = 1)
+```
+
+
+
+## Rétt framsetning
+
+```{r}
+p <- d |> 
+    filter(rekstrarform != "Alls starfandi", bakgrunnur == "Alls") |> 
+    count(ar, tegund, wt = starfandi) |> 
+    pivot_wider(names_from = tegund, values_from = n) |> 
+    ggplot(aes(ar, Opinbert)) +
+    geom_line() +
+    geom_rangeframe(data = tibble(ar = c(2008, 2021),
+                                  Opinbert = c(0, 65000))) +
+    scale_y_continuous(limits = c(0, 65000),
+                       expand = expansion()) +
+    scale_x_continuous(limits = c(2008, 2021),
+                       breaks = seq(2008, 2021),
+                       expand = expansion(add = 0.5)) +
+    theme_tufte() +
+    labs(title = "Fjöldi opinberra starfsmanna milli 2008 og 2021",
+         subtitle= "Hér er 0 inni á y-ásinum eins og á að vera þegar við teiknum fjöldatölur",
+         x = NULL,
+         y = NULL,
+         caption = "Kóði og gögn: https://github.com/bgautijonsson/opinbert_starfsfolk")
+
+p
+
+ggsave(plot = p, filename = "fjoldi_rett.pdf", 
+       width = 8, height = 0.5 * 8, scale = 1)
+```
+
+
+## Saman
+
+```{r}
+p <- d |> 
+    filter(rekstrarform != "Alls starfandi", bakgrunnur == "Alls") |> 
+    count(ar, tegund, wt = starfandi) |> 
+    ggplot(aes(ar, n)) +
+    geom_area(aes(fill = tegund), position = "stack", alpha = 0.4) +
+    geom_rangeframe(data = tibble(ar = c(2008, 2021),
+                                  n = c(0, 200000))) +
+    scale_y_continuous(limits = c(0, 200000),
+                       expand = expansion()) +
+    scale_x_continuous(limits = c(2008, 2022),
+                       breaks = seq(2008, 2021),
+                       expand = expansion(add = 0)) +
+    scale_fill_brewer(type = "qual", palette = "Set1") +
+    theme_tufte() +
+    labs(title = "Fjöldi <b style='color:#377eb8'>opinberra</b> og <b style='color:#e41a1c'>annarra</b> starfsmanna milli 2008 og 2021",
+         x = NULL,
+         y = NULL,
+         caption = "Kóði og gögn: https://github.com/bgautijonsson/opinbert_starfsfolk") +
+    theme(plot.title = element_markdown(), legend.position = "none")
+
+p
+
+ggsave(plot = p, filename = "fjoldi_alls.pdf", 
+       width = 8, height = 0.5 * 8, scale = 1)
+```
