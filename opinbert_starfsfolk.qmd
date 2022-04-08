@@ -110,7 +110,7 @@ p <- d |>
 
 p
 
-ggsave(plot = p, filename = "hlutfall_af_vinnuafli.pdf", 
+ggsave(plot = p, filename = "hlutfall_af_vinnuafli.png", 
        width = 8, height = 0.5 * 8, scale = 1)
 ```
 
@@ -144,7 +144,7 @@ p <- d |>
 
 p
 
-ggsave(plot = p, filename = "fjoldi_rangt.pdf", 
+ggsave(plot = p, filename = "fjoldi_rangt.png", 
        width = 8, height = 0.5 * 8, scale = 1)
 ```
 
@@ -181,7 +181,7 @@ p <- d |>
 
 p
 
-ggsave(plot = p, filename = "fjoldi_saman.pdf", 
+ggsave(plot = p, filename = "fjoldi_saman.png", 
        width = 8, height = 0.5 * 8, scale = 1)
 ```
 
@@ -212,7 +212,7 @@ p <- d |>
 
 p
 
-ggsave(plot = p, filename = "fjoldi_rett.pdf", 
+ggsave(plot = p, filename = "fjoldi_rett.png", 
        width = 8, height = 0.5 * 8, scale = 1)
 ```
 
@@ -242,6 +242,6 @@ p <- d |>
 
 p
 
-ggsave(plot = p, filename = "fjoldi_alls.pdf", 
+ggsave(plot = p, filename = "fjoldi_alls.png", 
        width = 8, height = 0.5 * 8, scale = 1)
 ```
